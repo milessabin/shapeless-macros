@@ -36,11 +36,13 @@ object Iso {
       import definitions._
       import Flag._
 
-      val sym = c.weakTypeOf[C].typeSymbol
+      val tpe = c.weakTypeOf[C]
+      val sym = tpe.typeSymbol
+
       if (!sym.isClass || !sym.asClass.isCaseClass)
         c.abort(c.enclosingPosition, s"$sym is not a case class")
 
-      val fields = sym.typeSignature.declarations.toList.collect {
+      val fields = tpe.declarations.toList.collect {
         case x: TermSymbol if x.isVal && x.isCaseAccessor => x
       }
 
@@ -51,7 +53,7 @@ object Iso {
       val HConsValueTree = Select(Ident(TermName("shapeless")), TermName("$colon$colon"))
 
       def mkHListType: Tree = {
-        fields.map { f => TypeTree(f.typeSignature) }.foldRight(HNilTypeTree : Tree) {
+        fields.map { f => TypeTree(f.typeSignatureIn(tpe)) }.foldRight(HNilTypeTree : Tree) {
           case (t, acc) => AppliedTypeTree(HConsTypeTree, List(t, acc))
         }
       }
@@ -79,7 +81,7 @@ object Iso {
       val isoClass =
         ClassDef(Modifiers(FINAL), TypeName("$anon"), List(),
           Template(
-            List(AppliedTypeTree(Ident(TypeName("Iso")), List(Ident(sym), mkHListType))),
+            List(AppliedTypeTree(Ident(TypeName("Iso")), List(TypeTree(tpe), mkHListType))),
             emptyValDef,
             List(
               DefDef(
@@ -90,7 +92,7 @@ object Iso {
 
               DefDef(
                 Modifiers(), TermName("to"), List(),
-                List(List(ValDef(Modifiers(PARAM), TermName("t"), Ident(sym), EmptyTree))),
+                List(List(ValDef(Modifiers(PARAM), TermName("t"), TypeTree(tpe), EmptyTree))),
                 TypeTree(),
                 mkHListValue),
 
@@ -123,14 +125,14 @@ object Iso {
       import definitions._
 
       val TypeRef(_, _, List(caseClassTpe, _)) = pt // Iso[Test.Foo,?]
-      val fields = caseClassTpe.typeSymbol.typeSignature.declarations.toList.collect {
+      val fields = caseClassTpe.typeSymbol.typeSignatureIn(caseClassTpe).declarations.toList.collect {
         case x: TermSymbol if x.isVal && x.isCaseAccessor => x
       }
 
       val hnilType =  weakTypeOf[shapeless.HNil]
       val hconsType = weakTypeOf[shapeless.::[_, _]]
 
-      val tequiv = fields.map(_.typeSignature).foldRight(hnilType) {
+      val tequiv = fields.map(_.typeSignatureIn(caseClassTpe)).foldRight(hnilType) {
         case (t, acc) => appliedType(hconsType, List(t, acc))
       }
 

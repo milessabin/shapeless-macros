@@ -37,19 +37,31 @@ class IsoTest {
 
   @Test
   def testTo {
-    val l = toHList(Foo(23, "foo", true))
-    println(l)
+    val l0 = toHList(Foo(23, "foo", true))
+    println(l0)
 
-    typed[Int :: String :: Boolean :: HNil](l)
-    assertEquals(23 :: "foo" :: true :: HNil, l)
+    typed[Int :: String :: Boolean :: HNil](l0)
+    assertEquals(23 :: "foo" :: true :: HNil, l0)
+
+    val l1 = toHList(("foo", 42, 4.2))
+    println(l1)
+
+    typed[String :: Int :: Double :: HNil](l1)
+    assertEquals("foo" :: 42 :: 4.2 :: HNil, l1)
   }
 
   @Test
   def testFrom {
-    val f = fromHList[Foo](13 :: "bar" :: false :: HNil)
-    println(f)
+    val c0 = fromHList[Foo](13 :: "bar" :: false :: HNil)
+    println(c0)
 
-    typed[Foo](f)
-    assertEquals(Foo(13, "bar", false), f)
+    typed[Foo](c0)
+    assertEquals(Foo(13, "bar", false), c0)
+
+    val c1 = fromHList[(String, Int, Double)]("foo" :: 42 :: 4.2 :: HNil)
+    println(c1)
+
+    typed[(String, Int, Double)](c1)
+    assertEquals(("foo", 42, 4.2), c1)
   }
 }
