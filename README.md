@@ -21,15 +21,15 @@ shapeless builds cleanly with Scala 2.11.0-SNAPSHOT.
 Building
 --------
 
-Implicit macros are supported by the [`topic/implicit-macros`](https://github.com/scalamacros/kepler/tree/topic/implicit-macros) branch of [Eugene
-Burmako's](https://twitter.com/xeno_by) `scalamacros/kepler` github repository. There isn't a binary
+Implicit macros are supported by the [topic/implicit-macros](https://github.com/scalamacros/kepler/tree/topic/implicit-macros) branch of [Eugene
+Burmako's](https://twitter.com/xeno_by) scalamacros/kepler github repository. There isn't a binary
 distribution of this branch, so you'll have to clone it and build it locally
 (for best results, build with a 1.6 JDK ... `ant all.clean ; ant` should give
 you a usable build in the `build/pack` subdirectory).
 
 Once you've done that, clone this project and either set environment variable
 `KEPLER_HOME` to point to the Scala build you've completed, or edit [project/Build.scala](https://github.com/milessabin/shapeless-macros/blob/master/project/Build.scala#L22) correspondingly.
-Then run `sbt` as normal (I recommend Paul Phillips [`sbt` launcher script](https://github.com/paulp/sbt-extras)): `compile` and then `test` to run the example.
+Then run `sbt` as normal (I recommend Paul Phillips [sbt launcher script](https://github.com/paulp/sbt-extras)): `compile` and then `test` to run the example.
 
 Discussion
 ----------
