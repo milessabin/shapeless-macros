@@ -30,116 +30,113 @@ trait Iso[T, U] {
  * support and the first cut at the implementation below.
  */
 object Iso {
-  object impl extends Macro {
-    def apply[C: c.WeakTypeTag, L: c.WeakTypeTag](c: Context): c.Expr[Iso[C, L]] = {
-      import c.universe._
-      import definitions._
-      import Flag._
+  implicit def materializeIso[C, L]: Iso[C, L] = macro MaterializeIso.expand[C, L]
+}
 
-      val tpe = c.weakTypeOf[C]
-      val sym = tpe.typeSymbol
+trait MaterializeIso extends Macro {
+  def expand[C: c.WeakTypeTag, L: c.WeakTypeTag]: c.Expr[Iso[C, L]] = {
+    import c.universe._
+    import definitions._
+    import Flag._
 
-      if (!sym.isClass || !sym.asClass.isCaseClass)
-        c.abort(c.enclosingPosition, s"$sym is not a case class")
+    val tpe = c.weakTypeOf[C]
+    val sym = tpe.typeSymbol
 
-      val fields = tpe.declarations.toList.collect {
-        case x: TermSymbol if x.isVal && x.isCaseAccessor => x
+    if (!sym.isClass || !sym.asClass.isCaseClass)
+      c.abort(c.enclosingPosition, s"$sym is not a case class")
+
+    val fields = tpe.declarations.toList.collect {
+      case x: TermSymbol if x.isVal && x.isCaseAccessor => x
+    }
+
+    val HNilTypeTree   = Select(Ident(TermName("shapeless")), TypeName("HNil"))
+    val HNilValueTree  = Select(Ident(TermName("shapeless")), TermName("HNil"))
+
+    val HConsTypeTree  = Select(Ident(TermName("shapeless")), TypeName("$colon$colon"))
+    val HConsValueTree = Select(Ident(TermName("shapeless")), TermName("$colon$colon"))
+
+    def mkHListType: Tree = {
+      fields.map { f => TypeTree(f.typeSignatureIn(tpe)) }.foldRight(HNilTypeTree : Tree) {
+        case (t, acc) => AppliedTypeTree(HConsTypeTree, List(t, acc))
       }
+    }
 
-      val HNilTypeTree   = Select(Ident(TermName("shapeless")), TypeName("HNil"))
-      val HNilValueTree  = Select(Ident(TermName("shapeless")), TermName("HNil"))
-
-      val HConsTypeTree  = Select(Ident(TermName("shapeless")), TypeName("$colon$colon"))
-      val HConsValueTree = Select(Ident(TermName("shapeless")), TermName("$colon$colon"))
-
-      def mkHListType: Tree = {
-        fields.map { f => TypeTree(f.typeSignatureIn(tpe)) }.foldRight(HNilTypeTree : Tree) {
-          case (t, acc) => AppliedTypeTree(HConsTypeTree, List(t, acc))
-        }
+    def mkHListValue: Tree = {
+      fields.map(_.name.toString.trim).foldRight(HNilValueTree : Tree) {
+        case (v, acc) => Apply(HConsValueTree, List(Select(Ident(TermName("t")), TermName(v)), acc))
       }
+    }
 
-      def mkHListValue: Tree = {
-        fields.map(_.name.toString.trim).foldRight(HNilValueTree : Tree) {
-          case (v, acc) => Apply(HConsValueTree, List(Select(Ident(TermName("t")), TermName(v)), acc))
-        }
-      }
+    def mkNth(n: Int): Tree =
+      Select(
+        (0 until n).foldRight(Ident(TermName("u")) : Tree) {
+          case (_, acc) => Select(acc, TermName("tail"))
+        },
+        TermName("head")
+      )
 
-      def mkNth(n: Int): Tree =
-        Select(
-          (0 until n).foldRight(Ident(TermName("u")) : Tree) {
-            case (_, acc) => Select(acc, TermName("tail"))
-          },
-          TermName("head")
-        )
+    def mkCaseClassValue: Tree =
+      Apply(
+        Select(Ident(sym.companionSymbol), TermName("apply")),
+        (0 until fields.length).map(mkNth(_)).toList
+      )
 
-      def mkCaseClassValue: Tree =
-        Apply(
-          Select(Ident(sym.companionSymbol), TermName("apply")),
-          (0 until fields.length).map(mkNth(_)).toList
-        )
+    val isoClass =
+      ClassDef(Modifiers(FINAL), TypeName("$anon"), List(),
+        Template(
+          List(AppliedTypeTree(Ident(TypeName("Iso")), List(TypeTree(tpe), mkHListType))),
+          emptyValDef,
+          List(
+            DefDef(
+              Modifiers(), nme.CONSTRUCTOR, List(),
+              List(List()),
+              TypeTree(),
+              Block(List(pendingSuperCall), Literal(Constant(())))),
 
-      val isoClass =
-        ClassDef(Modifiers(FINAL), TypeName("$anon"), List(),
-          Template(
-            List(AppliedTypeTree(Ident(TypeName("Iso")), List(TypeTree(tpe), mkHListType))),
-            emptyValDef,
-            List(
-              DefDef(
-                Modifiers(), nme.CONSTRUCTOR, List(),
-                List(List()),
-                TypeTree(),
-                Block(List(pendingSuperCall), Literal(Constant(())))),
+            DefDef(
+              Modifiers(), TermName("to"), List(),
+              List(List(ValDef(Modifiers(PARAM), TermName("t"), TypeTree(tpe), EmptyTree))),
+              TypeTree(),
+              mkHListValue),
 
-              DefDef(
-                Modifiers(), TermName("to"), List(),
-                List(List(ValDef(Modifiers(PARAM), TermName("t"), TypeTree(tpe), EmptyTree))),
-                TypeTree(),
-                mkHListValue),
-
-              DefDef(
-                Modifiers(), TermName("from"), List(),
-                List(List(ValDef(Modifiers(PARAM), TermName("u"), mkHListType, EmptyTree))),
-                TypeTree(),
-                mkCaseClassValue)
-            )
+            DefDef(
+              Modifiers(), TermName("from"), List(),
+              List(List(ValDef(Modifiers(PARAM), TermName("u"), mkHListType, EmptyTree))),
+              TypeTree(),
+              mkCaseClassValue)
           )
         )
-
-      c.Expr[Iso[C, L]](
-        Block(
-          List(isoClass),
-          Apply(Select(New(Ident(TypeName("$anon"))), nme.CONSTRUCTOR), List())
-        )
       )
-    }
 
-    override def inferExprInstance(c: Context)(
-      tree: c.Tree,
-      tparams: List[c.Symbol],
-      pt: c.Type = c.universe.WildcardType,
-      treeTp0: c.Type = null,
-      keepNothings: Boolean = true,
-      useWeaklyCompatible: Boolean = false): List[c.Symbol] = {
-
-      import c.universe._
-      import definitions._
-
-      val TypeRef(_, _, List(caseClassTpe, _)) = pt // Iso[Test.Foo,?]
-      val fields = caseClassTpe.typeSymbol.typeSignatureIn(caseClassTpe).declarations.toList.collect {
-        case x: TermSymbol if x.isVal && x.isCaseAccessor => x
-      }
-
-      val hnilType =  weakTypeOf[shapeless.HNil]
-      val hconsType = weakTypeOf[shapeless.::[_, _]]
-
-      val tequiv = fields.map(_.typeSignatureIn(caseClassTpe)).foldRight(hnilType) {
-        case (t, acc) => appliedType(hconsType, List(t, acc))
-      }
-
-      c.substExpr(tree, tparams, List(caseClassTpe, tequiv), pt)
-      Nil
-    }
+    c.Expr[Iso[C, L]](
+      Block(
+        List(isoClass),
+        Apply(Select(New(Ident(TypeName("$anon"))), nme.CONSTRUCTOR), List())
+      )
+    )
   }
 
-  implicit def materializeIso[C, L]: Iso[C, L] = macro impl[C, L]
+  override def onInfer(tic: c.TypeInferenceContext): Unit = {
+    val C = tic.unknowns(0)
+    val L = tic.unknowns(1)
+
+    import c.universe._
+    import definitions._
+
+    val TypeRef(_, _, List(caseClassTpe, _)) = tic.expectedType // Iso[Test.Foo,?]
+    tic.infer(C, caseClassTpe)
+
+    val fields = caseClassTpe.typeSymbol.typeSignatureIn(caseClassTpe).declarations.toList.collect {
+      case x: TermSymbol if x.isVal && x.isCaseAccessor => x
+    }
+
+    val hnilType =  weakTypeOf[shapeless.HNil]
+    val hconsType = weakTypeOf[shapeless.::[_, _]]
+
+    val tequiv = fields.map(_.typeSignatureIn(caseClassTpe)).foldRight(hnilType) {
+      case (t, acc) => appliedType(hconsType, List(t, acc))
+    }
+
+    tic.infer(L, tequiv)
+  }
 }

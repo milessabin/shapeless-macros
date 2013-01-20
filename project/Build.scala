@@ -19,8 +19,6 @@ import Keys._
 import util.Properties
 
 object ShapelessMacrosBuild extends Build {
-  val keplerHome =  Properties.envOrElse("KEPLER_HOME", "/home/miles/projects/scala/kepler/build/pack")
-
   lazy val shapeless = Project(
     id = "shapeless",
     base = file("."),
@@ -33,7 +31,9 @@ object ShapelessMacrosBuild extends Build {
   lazy val shapelessBase = Project(
     id = "shapeless-base", 
     base = file("base"),
-    settings = commonSettings
+    settings = commonSettings ++ Seq(
+      libraryDependencies <+= (scalaVersion)("org.scala-lang.macro-paradise" % "scala-reflect" % _)
+    )
   )
 
   lazy val shapelessCore = Project(
@@ -52,9 +52,8 @@ object ShapelessMacrosBuild extends Build {
     Seq(
       organization        := "com.chuusai",
       version             := "1.0.0-SNAPSHOT",
-      scalaVersion        := "2.10.0",
-      scalaHome           := Some(file(keplerHome)),
-      unmanagedBase       := file(keplerHome+"/lib"),
+      scalaVersion        := "2.11.0-SNAPSHOT",
+      scalaOrganization   := "org.scala-lang.macro-paradise",
 
       scalacOptions       := Seq(
         "-feature",
@@ -63,7 +62,7 @@ object ShapelessMacrosBuild extends Build {
 
       resolvers           ++= Seq(
         Classpaths.typesafeSnapshots,
-        "snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
+        Resolver.sonatypeRepo("snapshots")
       )
     )
 }
