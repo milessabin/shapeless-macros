@@ -22,7 +22,7 @@ object ShapelessMacrosBuild extends Build {
   lazy val shapeless = Project(
     id = "shapeless",
     base = file("."),
-    aggregate = Seq(shapelessBase, shapelessCore),
+    aggregate = Seq(shapelessBase, shapelessMacros, shapelessCore),
     settings = commonSettings ++ Seq(
       moduleName := "shapeless-root"
     )
@@ -31,10 +31,16 @@ object ShapelessMacrosBuild extends Build {
   lazy val shapelessBase = Project(
     id = "shapeless-base", 
     base = file("base"),
+    settings = commonSettings
+  )
+
+  lazy val shapelessMacros = Project(
+    id = "shapeless-macros", 
+    base = file("macros"),
     settings = commonSettings ++ Seq(
       libraryDependencies <+= (scalaVersion)("org.scala-lang.macro-paradise" % "scala-reflect" % _)
     )
-  )
+  ) dependsOn(shapelessBase)
 
   lazy val shapelessCore = Project(
     id = "shapeless-core", 
@@ -46,7 +52,7 @@ object ShapelessMacrosBuild extends Build {
         "com.novocode" % "junit-interface" % "0.7" % "test"
       )
     )
-  ) dependsOn(shapelessBase)
+  ) dependsOn(shapelessBase, shapelessMacros)
 
   def commonSettings = Defaults.defaultSettings ++
     Seq(
